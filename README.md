@@ -785,79 +785,117 @@ fn main() {}
 
 PDF objects are represented by the `Object` enum:
 
-```rust,ignore
-Object::Null
-Object::Boolean(bool)
-Object::Integer(i64)
-Object::Real(f32)
-Object::Name(Vec<u8>)
-Object::String(Vec<u8>, StringFormat)
-Object::Array(Vec<Object>)
-Object::Dictionary(Dictionary)
-Object::Stream(Stream)
-Object::Reference(ObjectId)   // (u32, u16)
+```rust
+use lopdf::{Object, ObjectId, Dictionary, Stream, StringFormat};
+
+// Create different object types
+let null = Object::Null;
+let boolean = Object::Boolean(true);
+let integer = Object::Integer(42);
+let real = Object::Real(3.14);
+let name = Object::Name(b"Type".to_vec());
+let string = Object::String(b"Hello".to_vec(), StringFormat::Literal);
+let array = Object::Array(vec![1.into(), 2.into(), 3.into()]);
+let reference = Object::Reference((1, 0));
+
+// Type conversions
+assert_eq!(boolean.as_bool().unwrap(), true);
+assert_eq!(integer.as_i64().unwrap(), 42);
+assert_eq!(real.as_f32().unwrap(), 3.14);
+assert_eq!(name.as_name().unwrap(), b"Type");
+assert_eq!(string.as_str().unwrap(), b"Hello");
+assert_eq!(reference.as_reference().unwrap(), (1, 0));
+
+// Many Rust types convert to Object via Into
+let _: Object = true.into();
+let _: Object = 42i64.into();
+let _: Object = 3.14f64.into();
+let _: Object = "Name".into();
 ```
-
-Type conversions: `as_bool()`, `as_i64()`, `as_f32()`, `as_name()`, `as_str()`, `as_reference()`, `as_array()`, `as_dict()`, `as_stream()`, and mutable variants.
-
-Many Rust types convert to `Object` via `Into`: `bool`, `i64`, `f64`, `&str`, `String`, `Vec<Object>`, `Dictionary`, `Stream`, `ObjectId`.
 
 ### Dictionary
 
-```rust,ignore
-let mut dict = lopdf::dictionary! {
+```rust
+use lopdf::{dictionary, Object};
+
+let parent_id = (1u32, 0u16); // ObjectId
+
+let mut dict = dictionary! {
     "Type" => "Page",
     "Parent" => parent_id,
     "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
 };
 
 dict.set("Rotate", 90);
-dict.has(b"Type");          // true
-dict.get(b"Type");          // Ok(&Object)
-dict.remove(b"Rotate");     // Some(Object)
+assert!(dict.has(b"Type"));
+assert!(dict.get(b"Type").is_ok());
+assert!(dict.remove(b"Rotate").is_some());
+assert!(!dict.has(b"Rotate"));
 ```
 
 ### Stream
 
-```rust,ignore
-let stream = Stream::new(dictionary! {}, content_bytes);
+```rust
+use lopdf::{dictionary, Stream};
 
-stream.compress()?;                    // Compress with FlateDecode
-let plain = stream.get_plain_content()?; // Decompress
-stream.filters()?;                     // Get filter names
+// Content must be large enough for compression to reduce size
+let original = "BT /F1 12 Tf 100 700 Td (Hello World) Tj ET\n".repeat(10).into_bytes();
+let mut stream = Stream::new(dictionary! {}, original.clone());
+
+// Compress with FlateDecode
+stream.compress().unwrap();
+
+// Inspect filters (available after compression)
+let filters = stream.filters().unwrap();
+assert_eq!(filters, vec![b"FlateDecode".as_slice()]);
+
+// Decompress back to original
+let plain = stream.get_plain_content().unwrap();
+assert_eq!(plain, original);
 ```
 
 ### PdfMetadata
 
-```rust,ignore
-pub struct PdfMetadata {
-    pub title: Option<String>,
-    pub author: Option<String>,
-    pub subject: Option<String>,
-    pub keywords: Option<String>,
-    pub creator: Option<String>,
-    pub producer: Option<String>,
-    pub creation_date: Option<String>,
-    pub modification_date: Option<String>,
-    pub page_count: u32,
-    pub version: String,
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let metadata = Document::load_metadata("assets/example.pdf").unwrap();
+
+    // All fields available
+    let _title: &Option<String> = &metadata.title;
+    let _author: &Option<String> = &metadata.author;
+    let _subject: &Option<String> = &metadata.subject;
+    let _keywords: &Option<String> = &metadata.keywords;
+    let _creator: &Option<String> = &metadata.creator;
+    let _producer: &Option<String> = &metadata.producer;
+    let _created: &Option<String> = &metadata.creation_date;
+    let _modified: &Option<String> = &metadata.modification_date;
+    let _pages: u32 = metadata.page_count;
+    let _version: &String = &metadata.version;
 }
 ```
 
 ### SaveOptions
 
-```rust,ignore
-SaveOptions::builder()
+```rust
+use lopdf::SaveOptions;
+
+let options = SaveOptions::builder()
     .use_object_streams(true)       // default: false
     .use_xref_streams(true)         // default: false
     .max_objects_per_stream(200)    // default: 100
     .compression_level(9)           // 0-9, default: 6
-    .build()
+    .build();
+
+assert!(options.use_object_streams);
+assert!(options.use_xref_streams);
 ```
 
 ### Permissions (for encryption)
 
-```rust,ignore
+```rust
 use lopdf::Permissions;
 
 let perms = Permissions::PRINTABLE
@@ -868,6 +906,9 @@ let perms = Permissions::PRINTABLE
     | Permissions::COPYABLE_FOR_ACCESSIBILITY
     | Permissions::ASSEMBLABLE
     | Permissions::PRINTABLE_IN_HIGH_QUALITY;
+
+assert!(perms.contains(Permissions::PRINTABLE));
+assert!(perms.contains(Permissions::COPYABLE));
 ```
 
 ---
