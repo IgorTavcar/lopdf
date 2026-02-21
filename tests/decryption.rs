@@ -1326,7 +1326,7 @@ fn test_encrypt_decrypt_multipage_roundtrip() {
     let mut page_ids = Vec::new();
     let mut content_ids = Vec::new();
     
-    for i in 0..5 {
+    for _i in 0..5 {
         page_ids.push(doc.new_object_id());
         content_ids.push(doc.new_object_id());
     }
