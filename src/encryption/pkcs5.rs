@@ -9,9 +9,8 @@ pub struct Pkcs5;
 impl Pkcs5 {
     #[inline]
     fn unpad(block: &[u8], strict: bool) -> Result<&[u8], UnpadError> {
-        // TODO: use bounds to check it at compile time
         if block.len() > 16 {
-            panic!("block size is too big for PKCS#5");
+            return Err(UnpadError);
         }
         let bs = block.len();
         let n = block[bs - 1];
@@ -31,13 +30,8 @@ impl RawPadding for Pkcs5 {
 
     #[inline]
     fn raw_pad(block: &mut [u8], pos: usize) {
-        // TODO: use bounds to check it at compile time for Padding<B>
-        if block.len() > 16 {
-            panic!("block size is too big for PKCS#5");
-        }
-        if pos >= block.len() {
-            panic!("`pos` is bigger or equal to block size");
-        }
+        debug_assert!(block.len() <= 16, "block size is too big for PKCS#5");
+        debug_assert!(pos < block.len(), "`pos` is bigger or equal to block size");
         let n = (block.len() - pos) as u8;
         for b in &mut block[pos..] {
             *b = n;

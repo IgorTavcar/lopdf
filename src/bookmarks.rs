@@ -58,7 +58,7 @@ impl Document {
             let id: ObjectId = (*maxid, 0);
             *maxid += 1;
             let info_id: ObjectId = (*maxid, 0);
-            let bookmark = self.bookmark_table.get(i).unwrap();
+            let Some(bookmark) = self.bookmark_table.get(i) else { continue };
 
             let info = dictionary! {
                 "D" =>  vec![bookmark.page.into(), Object::Name("Fit".into())],
@@ -93,7 +93,8 @@ impl Document {
             if first.is_none() {
                 first = Some(id);
             } else if let Some(x) = last {
-                let inner_object = processed.get_mut(&x).unwrap();
+                let inner_object = processed.get_mut(&x)
+                    .expect("just inserted above");
                 inner_object.set("Next", id);
                 child.set("Prev", x);
             }

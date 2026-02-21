@@ -284,7 +284,6 @@ impl Object {
         }
     }
 
-    // TODO: maybe remove
     pub fn type_name(&self) -> Result<&[u8]> {
         match self {
             Object::Dictionary(dict) => dict.get_type(),

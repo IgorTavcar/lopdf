@@ -100,7 +100,6 @@ impl Encoding<'_> {
 
                     if let Some(entries) = unicode_map.get_source_codes_for_unicode(&current_unicode_seq) {
                         if let Some(entry) = entries.first() {
-                            // TODO: Add logic to pick the best entry if multiple
                             let mut bytes_for_code = Vec::new();
                             let val = entry.source_code;
                             match entry.code_len {

@@ -141,8 +141,12 @@ impl ToUnicodeCMap {
                 }
             }
         }
+        // Sort entries by code_len so shorter byte sequences are preferred
+        for entries in rev_map.values_mut() {
+            entries.sort_by_key(|e| e.code_len);
+        }
         cmap.reverse_map = Some(rev_map);
-        
+
         Ok(cmap)
     }
 
@@ -191,10 +195,9 @@ impl ToUnicodeCMap {
     }
 
     /// Gets the source code(s) for a given Unicode sequence.
-    /// Prioritizes shorter byte sequences if multiple mappings exist.
+    /// Entries are sorted by code_len ascending, so shorter byte sequences are preferred.
     pub fn get_source_codes_for_unicode(&self, unicode_sequence: &[u16]) -> Option<&[ReverseCMapEntry]> {
         if let Some(map) = &self.reverse_map {
-            // TODO: Add prioritization logic if needed (e.g., prefer shorter code_len)
             map.get(unicode_sequence).map(|v| v.as_slice())
         } else {
             None

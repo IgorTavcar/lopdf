@@ -55,8 +55,8 @@ pub enum Error {
     /// IO error
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
-    // TODO: Maybe remove, as outline is not required in spec.
     /// PDF document has no outline.
+    /// Note: outlines are optional per the PDF spec (ISO 32000), so this is not a fatal error.
     #[error("PDF document does not have an outline")]
     NoOutline,
     /// PDF document is not encrypted.

@@ -25,7 +25,7 @@ pub enum XrefType {
 
 #[derive(Debug, Clone)]
 pub enum XrefEntry {
-    Free, // TODO add generation number
+    Free { next_free_object: u32, generation: u16 },
     UnusableFree,
     Normal { offset: u32, generation: u16 },
     Compressed { container: u32, index: u16 },
@@ -88,11 +88,17 @@ impl XrefEntry {
         let mut result = Vec::new();
         
         match self {
-            XrefEntry::Free | XrefEntry::UnusableFree => {
+            XrefEntry::Free { next_free_object, generation } => {
                 // Type 0: Free object
                 encode_field(0, widths[0], &mut result);
-                encode_field(0, widths[1], &mut result); // Next free object
-                encode_field(0, widths[2], &mut result); // Generation
+                encode_field(*next_free_object as u64, widths[1], &mut result);
+                encode_field(*generation as u64, widths[2], &mut result);
+            }
+            XrefEntry::UnusableFree => {
+                // Type 0: Free object (unusable)
+                encode_field(0, widths[0], &mut result);
+                encode_field(0, widths[1], &mut result);
+                encode_field(65535, widths[2], &mut result);
             }
             XrefEntry::Normal { offset, generation } => {
                 // Type 1: Uncompressed object
@@ -120,8 +126,8 @@ impl XrefEntry {
             XrefEntry::Compressed { container: _, index: _ } => {
                 writeln!(file, "{:>010} {:>05} f ", 0, 65535)?;
             }
-            XrefEntry::Free => {
-                writeln!(file, "{:>010} {:>05} f ", 0, 0)?;
+            XrefEntry::Free { next_free_object, generation } => {
+                writeln!(file, "{next_free_object:>010} {generation:>05} f ")?;
             }
             XrefEntry::UnusableFree => {
                 writeln!(file, "{:>010} {:>05} f ", 0, 65535)?;

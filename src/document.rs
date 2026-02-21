@@ -108,7 +108,8 @@ impl Document {
                 if 0 == page.0 && !children.is_empty() {
                     let objectid = self.recursive_fix_pages(&children[..], false);
 
-                    let bookmark = self.bookmark_table.get_mut(id).unwrap();
+                    let bookmark = self.bookmark_table.get_mut(id)
+                        .expect("bookmark verified to exist above");
                     bookmark.page = objectid;
                     page = objectid;
                 }
@@ -176,7 +177,8 @@ impl Document {
         let object = self.objects.get(&id).ok_or(Error::ObjectNotFound(id))?;
         let (ref_id, _obj) = self.dereference(object)?;
 
-        Ok(self.objects.get_mut(&ref_id.unwrap_or(id)).unwrap())
+        Ok(self.objects.get_mut(&ref_id.unwrap_or(id))
+            .expect("object verified to exist by dereference"))
     }
 
     /// Get the object ID of the page that contains `id`.
@@ -487,17 +489,18 @@ impl Document {
                 continue;
             };
 
-            // TODO: Is insert and replace intended behavior?
-            // See https://github.com/J-F-Liu/lopdf/issues/160 for more info
             object_streams.extend(obj_stream.objects);
         }
 
-        // Only add entries, but never replace entries
+        // Per PDF spec, first definition wins for duplicate object IDs.
+        // See https://github.com/J-F-Liu/lopdf/issues/160
         for (id, entry) in object_streams {
             self.objects.entry(id).or_insert(entry);
         }
 
-        let object_id = self.trailer.remove(b"Encrypt").unwrap().as_reference()?;
+        let object_id = self.trailer.remove(b"Encrypt")
+            .ok_or(Error::DictKey("Encrypt".to_string()))?
+            .as_reference()?;
         self.objects.remove(&object_id);
 
         self.encryption_state = Some(state);
@@ -839,9 +842,10 @@ impl Iterator for PageTreeIter<'_> {
                             }
                             b"Pages" => {
                                 if self.stack.len() < Self::PAGE_TREE_DEPTH_LIMIT {
-                                    let kids = self.kids.unwrap();
-                                    if !kids.is_empty() {
-                                        self.stack.push(kids);
+                                    if let Some(kids) = self.kids.take() {
+                                        if !kids.is_empty() {
+                                            self.stack.push(kids);
+                                        }
                                     }
                                     self.kids = Self::kids(self.doc, kid_id);
                                 }

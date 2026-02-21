@@ -513,8 +513,9 @@ pub fn decode_xref_stream(mut stream: Stream) -> Result<(Xref, Dictionary)> {
                 match entry_type {
                     0 => {
                         // free object
-                        read_big_endian_integer(&mut reader, bytes2.as_mut_slice())?;
-                        read_big_endian_integer(&mut reader, bytes3.as_mut_slice())?;
+                        let next_free_object = read_big_endian_integer(&mut reader, bytes2.as_mut_slice())?;
+                        let generation = read_big_endian_integer(&mut reader, bytes3.as_mut_slice())? as u16;
+                        xref.insert((start + j) as u32, XrefEntry::Free { next_free_object, generation });
                     }
                     1 => {
                         // normal object

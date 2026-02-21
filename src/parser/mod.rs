@@ -455,6 +455,11 @@ fn xref(input: ParserInput) -> NomResult<Xref> {
                         if let Ok(generation) = generation.try_into() {
                             xref.insert((start + index) as u32, XrefEntry::Normal { offset, generation });
                         }
+                    } else {
+                        let next_free_object = offset;
+                        if let Ok(generation) = generation.try_into() {
+                            xref.insert((start + index) as u32, XrefEntry::Free { next_free_object, generation });
+                        }
                     }
                 }
                 xref
@@ -761,7 +766,7 @@ startxref
 %%EOF
 ";
         match xref(test_span(input)) {
-            Ok((_, re)) => assert_eq!(re.entries.len(), 15),
+            Ok((_, re)) => assert_eq!(re.entries.len(), 16),
             Err(err) => panic!("unexpected {:?}", err),
         }
     }
