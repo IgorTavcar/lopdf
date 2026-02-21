@@ -19,7 +19,7 @@ use crate::error::{ParseError, XrefError};
 use crate::object_stream::ObjectStream;
 use crate::parser::{self, ParserInput};
 use crate::xref::XrefEntry;
-use crate::{Document, Error, Object, ObjectId, Result};
+use crate::{Document, Error, Object, Result};
 
 pub use metadata::PdfMetadata;
 
@@ -29,8 +29,7 @@ pub struct Reader<'a> {
     pub buffer: &'a [u8],
     pub document: Document,
     pub encryption_state: Option<EncryptionState>,
-    pub raw_objects: BTreeMap<ObjectId, Vec<u8>>, // Store raw bytes for encrypted objects
-    pub password: Option<String>,                 // Password for encrypted PDFs
+    pub password: Option<String>, // Password for encrypted PDFs
 }
 
 /// Maximum allowed embedding of literal strings.

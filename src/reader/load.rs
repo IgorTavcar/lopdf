@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::convert::TryInto;
 #[cfg(not(feature = "async"))]
 use std::fs::File;
@@ -63,7 +62,7 @@ impl Document {
             buffer: &buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password,
         }
         .read(filter_func)
@@ -80,7 +79,7 @@ impl Document {
             buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: Some(password.to_string()),
         }
         .read(None)
@@ -122,7 +121,7 @@ impl Document {
             buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: None,
         }
         .read_metadata()
@@ -135,7 +134,7 @@ impl Document {
             buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: Some(password.to_string()),
         }
         .read_metadata()
@@ -151,7 +150,7 @@ impl Document {
             buffer: &buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password,
         }
         .read_metadata()
@@ -194,7 +193,7 @@ impl Document {
             buffer: &buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password,
         }
         .read(filter_func)
@@ -243,7 +242,7 @@ impl Document {
             buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: None,
         }
         .read_metadata()
@@ -256,7 +255,7 @@ impl Document {
             buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: Some(password.to_string()),
         }
         .read_metadata()
@@ -274,7 +273,7 @@ impl Document {
             buffer: &buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password,
         }
         .read_metadata()
@@ -289,7 +288,7 @@ impl TryInto<Document> for &[u8] {
             buffer: self,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: None,
         }
         .read(None)
@@ -320,7 +319,7 @@ impl IncrementalDocument {
             buffer: &buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: None,
         }
         .read(None)?;
@@ -361,7 +360,7 @@ impl IncrementalDocument {
             buffer: &buffer,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: None,
         }
         .read(None)?;
@@ -383,7 +382,7 @@ impl TryInto<IncrementalDocument> for &[u8] {
             buffer: self,
             document: Document::new(),
             encryption_state: None,
-            raw_objects: BTreeMap::new(),
+
             password: None,
         }
         .read(None)?;

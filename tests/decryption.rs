@@ -145,7 +145,6 @@ fn test_decrypt_pdf_with_empty_password() {
 
 #[cfg(not(feature = "async"))]
 #[test]
-#[ignore] // Object streams with encryption need more work
 fn test_decrypt_pdf_with_object_streams() {
     // Create a document with object streams
     let mut doc = Document::with_version("1.5");
@@ -203,7 +202,8 @@ fn test_decrypt_pdf_with_object_streams() {
     let content = b"BT\n/F1 12 Tf\n100 700 Td\n(Test with Object Streams!) Tj\nET\n";
     let content_stream = lopdf::Stream::new(lopdf::dictionary! {}, content.to_vec());
     doc.objects.insert((5, 0), Object::Stream(content_stream));
-    
+    doc.max_id = 5;
+
     // Compress document using object streams
     doc.compress();
     
@@ -225,14 +225,14 @@ fn test_decrypt_pdf_with_object_streams() {
     let encrypted_path = temp_dir.path().join("test_encrypted_objstream.pdf");
     doc.save(&encrypted_path).unwrap();
     
-    // Load and verify
+    // Load and verify — document was auto-decrypted (empty user password)
     let loaded_doc = Document::load(&encrypted_path).unwrap();
-    assert!(loaded_doc.is_encrypted());
-    
+    assert!(loaded_doc.was_encrypted());
+
     // Verify we can access the content
     let pages = loaded_doc.get_pages();
     assert_eq!(pages.len(), 1);
-    
+
     // Extract text to verify decryption worked
     let page_numbers: Vec<u32> = pages.keys().cloned().collect();
     let text = loaded_doc.extract_text(&page_numbers).unwrap();
@@ -241,7 +241,6 @@ fn test_decrypt_pdf_with_object_streams() {
 
 #[cfg(not(feature = "async"))]
 #[test]
-#[ignore] // Raw object extraction needs adjustments for new decryption approach
 fn test_encrypted_pdf_raw_object_extraction() {
     // This test verifies that the raw object extraction works correctly
     // for encrypted PDFs, which is crucial for the pdftk-style decryption
@@ -279,7 +278,8 @@ fn test_encrypted_pdf_raw_object_extraction() {
     doc.objects.insert((10, 0), Object::Integer(42));
     doc.objects.insert((11, 0), Object::String(b"test string".to_vec(), lopdf::StringFormat::Literal));
     doc.objects.insert((12, 0), Object::Array(vec![Object::Integer(1), Object::Integer(2), Object::Integer(3)]));
-    
+    doc.max_id = 12;
+
     // Encrypt
     let permissions = lopdf::Permissions::all();
     let encryption_version = lopdf::EncryptionVersion::V2 {
@@ -299,8 +299,8 @@ fn test_encrypted_pdf_raw_object_extraction() {
     doc.save(&path).unwrap();
     
     let loaded_doc = Document::load(&path).unwrap();
-    assert!(loaded_doc.is_encrypted());
-    
+    assert!(loaded_doc.was_encrypted());
+
     // Verify that all objects were properly decrypted
     assert_eq!(loaded_doc.get_object((10, 0)).unwrap().as_i64().unwrap(), 42);
     
@@ -324,7 +324,6 @@ fn test_encrypted_pdf_raw_object_extraction() {
 
 #[cfg(not(feature = "async"))]
 #[test]
-#[ignore] // Structure preservation test needs adjustments
 fn test_encrypted_pdf_preserves_structure() {
     // Test that the document structure is preserved after encryption/decryption
     let mut doc = Document::with_version("1.5");
@@ -374,7 +373,8 @@ fn test_encrypted_pdf_preserves_structure() {
         "Resources" => lopdf::dictionary! {}
     };
     doc.objects.insert((4, 0), Object::Dictionary(page_dict));
-    
+    doc.max_id = 4;
+
     // Encrypt
     let encryption_version = lopdf::EncryptionVersion::V2 {
         document: &doc,
@@ -393,8 +393,8 @@ fn test_encrypted_pdf_preserves_structure() {
     doc.save(&path).unwrap();
     
     let loaded_doc = Document::load(&path).unwrap();
-    assert!(loaded_doc.is_encrypted());
-    
+    assert!(loaded_doc.was_encrypted());
+
     // Verify structure is preserved
     let root = loaded_doc.trailer.get(b"Root").unwrap().as_reference().unwrap();
     let catalog = loaded_doc.get_object(root).unwrap();
