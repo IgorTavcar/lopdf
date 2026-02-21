@@ -4,171 +4,357 @@
 [![CI](https://github.com/J-F-Liu/lopdf/actions/workflows/ci.yml/badge.svg)](https://github.com/J-F-Liu/lopdf/actions/workflows/ci.yml)
 [![Docs]( https://docs.rs/lopdf/badge.svg)](https://docs.rs/lopdf)
 
-A Rust library for PDF document manipulation.
+A Rust library for PDF document manipulation. Read, modify, merge, create, encrypt, decrypt, and extract text from PDF files.
 
-A useful reference for understanding the PDF file format and the
-eventual usage of this library is the
-[PDF 1.7 Reference Document](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf).
-The PDF 2.0 specification is available [here](https://www.pdfa.org/announcing-no-cost-access-to-iso-32000-2-pdf-2-0/).
+Useful references for working with PDF internals:
+- [PDF 1.7 Reference](https://opensource.adobe.com/dc-acrobat-sdk-docs/pdfstandards/PDF32000_2008.pdf)
+- [PDF 2.0 Specification](https://www.pdfa.org/announcing-no-cost-access-to-iso-32000-2-pdf-2-0/)
 
 ## Requirements
 
-- **Rust 1.85 or later** - Required for Rust 2024 edition features and object streams support
-- To check your Rust version: `rustc --version`
-- To update Rust: `rustup update`
+- **Rust 1.85+** (2024 edition)
 
-## Example Code
+## Installation
 
-* Create PDF document
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+lopdf = "0.39"
+```
+
+### Feature Flags
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `rayon` | Yes | Parallel object loading |
+| `chrono` | Yes | Date/time parsing with chrono |
+| `jiff` | Yes | Date/time parsing with jiff |
+| `time` | Yes | Date/time parsing with time |
+| `async` | No | Async I/O with tokio |
+| `embed_image` | No | Image embedding support |
+| `serde` | No | Serialization for TOC structures |
+| `wasm_js` | No | WebAssembly support |
+
+```toml
+# Minimal (no date parsing, no parallel loading)
+lopdf = { version = "0.39", default-features = false }
+
+# With async support
+lopdf = { version = "0.39", features = ["async"] }
+
+# With image embedding
+lopdf = { version = "0.39", features = ["embed_image"] }
+```
+
+---
+
+## Quick Start
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    // Load a PDF
+    let doc = Document::load("assets/example.pdf").unwrap();
+
+    // Get page count
+    let pages = doc.get_pages();
+    println!("{} pages", pages.len());
+
+    // Extract text
+    let page_numbers: Vec<u32> = pages.keys().cloned().collect();
+    let text = doc.extract_text(&page_numbers).unwrap();
+    println!("{}", text);
+}
+```
+
+---
+
+## Examples
+
+### Load and Inspect a PDF
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let doc = Document::load("assets/example.pdf").unwrap();
+
+    println!("PDF version: {}", doc.version);
+    println!("Pages: {}", doc.get_pages().len());
+
+    // Iterate over all objects
+    for (&(obj_num, gen_num), object) in &doc.objects {
+        println!("Object ({}, {}): {}", obj_num, gen_num, object.enum_variant());
+    }
+
+    // Access the document catalog
+    let catalog = doc.catalog().unwrap();
+    println!("Catalog keys: {:?}", catalog.as_hashmap().keys().collect::<Vec<_>>());
+}
+```
+
+### Load from Different Sources
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    // From file
+    let doc = Document::load("assets/example.pdf").unwrap();
+
+    // From memory
+    let bytes = std::fs::read("assets/example.pdf").unwrap();
+    let doc = Document::load_mem(&bytes).unwrap();
+
+    // From any reader
+    let file = std::fs::File::open("assets/example.pdf").unwrap();
+    let doc = Document::load_from(file).unwrap();
+}
+```
+
+### Extract Text from Specific Pages
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let doc = Document::load("assets/example.pdf").unwrap();
+
+    // Extract from page 1 only
+    let text = doc.extract_text(&[1]).unwrap();
+    println!("Page 1: {}", text);
+
+    // Extract from all pages
+    let page_numbers: Vec<u32> = doc.get_pages().keys().cloned().collect();
+    let text = doc.extract_text(&page_numbers).unwrap();
+
+    // For multi-page PDFs you can pick specific pages:
+    // let text = doc.extract_text(&[1, 3, 5]).unwrap();
+}
+```
+
+### Extract Metadata (Fast)
+
+Extract title, author, page count, and other metadata without loading the entire document. This is much faster for large PDFs.
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let metadata = Document::load_metadata("assets/example.pdf").unwrap();
+
+    println!("Title: {:?}", metadata.title);
+    println!("Author: {:?}", metadata.author);
+    println!("Subject: {:?}", metadata.subject);
+    println!("Creator: {:?}", metadata.creator);
+    println!("Producer: {:?}", metadata.producer);
+    println!("Pages: {}", metadata.page_count);
+    println!("Version: {}", metadata.version);
+    println!("Created: {:?}", metadata.creation_date);
+    println!("Modified: {:?}", metadata.modification_date);
+
+    // Also works from memory
+    let bytes = std::fs::read("assets/example.pdf").unwrap();
+    let metadata = Document::load_metadata_mem(&bytes).unwrap();
+}
+```
+
+### Modify an Existing PDF
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let mut doc = Document::load("assets/example.pdf").unwrap();
+
+    // Change PDF version
+    doc.version = "1.4".to_string();
+
+    // Replace text on page 1
+    doc.replace_text(1, "Hello World!", "Modified text!", None);
+
+    // Replace partial text matches
+    let count = doc.replace_partial_text(1, "Hello", "Hi", None).unwrap();
+    println!("Replaced {} occurrences", count);
+
+    // Save
+    if false { // excluded from doctest
+        doc.save("modified.pdf").unwrap();
+    }
+}
+```
+
+### Rotate Pages
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let mut doc = Document::load("assets/example.pdf").unwrap();
+
+    for (_, page_id) in doc.get_pages() {
+        let page_dict = doc.get_object_mut(page_id)
+            .and_then(|obj| obj.as_dict_mut())
+            .unwrap();
+
+        let current = page_dict.get(b"Rotate")
+            .and_then(|obj| obj.as_i64())
+            .unwrap_or(0);
+
+        page_dict.set("Rotate", (current + 90) % 360);
+    }
+
+    if false { doc.save("rotated.pdf").unwrap(); }
+}
+```
+
+### Delete Pages
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let mut doc = Document::load("assets/example.pdf").unwrap();
+
+    // Delete page 1 (by page object ID, not page number)
+    let pages = doc.get_pages();
+    if let Some(&page_id) = pages.get(&1) {
+        doc.remove_object(&page_id).ok();
+    }
+}
+```
+
+### Work with Page Content Streams
+
+```rust
+use lopdf::Document;
+use lopdf::content::{Content, Operation};
+
+#[cfg(not(feature = "async"))]
+{
+    let doc = Document::load("assets/example.pdf").unwrap();
+    let pages = doc.get_pages();
+    let page_id = *pages.get(&1).unwrap();
+
+    // Get raw content stream
+    let content_bytes = doc.get_page_content(page_id).unwrap();
+
+    // Decode into structured operations
+    let content = Content::decode(&content_bytes).unwrap();
+
+    for operation in &content.operations {
+        println!("{} {:?}", operation.operator, operation.operands);
+    }
+}
+```
+
+### Work with Annotations
+
+```rust
+use lopdf::Document;
+
+#[cfg(not(feature = "async"))]
+{
+    let doc = Document::load("assets/AnnotationDemo.pdf").unwrap();
+
+    for (page_num, page_id) in doc.get_pages() {
+        if let Ok(annotations) = doc.get_page_annotations(page_id) {
+            println!("Page {} has {} annotations", page_num, annotations.len());
+            for annot in annotations {
+                if let Ok(subtype) = annot.get(b"Subtype") {
+                    println!("  Type: {:?}", subtype);
+                }
+            }
+        }
+    }
+}
+```
+
+### Create a PDF from Scratch
 
 ```rust
 use lopdf::dictionary;
 use lopdf::{Document, Object, Stream};
 use lopdf::content::{Content, Operation};
 
-// `with_version` specifes the PDF version this document complies with.
 let mut doc = Document::with_version("1.5");
-// Object IDs are used for cross referencing in PDF documents.
-// `lopdf` helps keep track of them for us. They are simple integers.
-// Calls to `doc.new_object_id` and `doc.add_object` return an object ID.
-
-// "Pages" is the root node of the page tree.
 let pages_id = doc.new_object_id();
 
-// Fonts are dictionaries. The "Type", "Subtype" and "BaseFont" tags
-// are straight out of the PDF spec.
-//
-// The dictionary macro is a helper that allows complex
-// key-value relationships to be represented in a simpler
-// visual manner, similar to a match statement.
-// A dictionary is implemented as an IndexMap of Vec<u8>, and Object
+// Add a font
 let font_id = doc.add_object(dictionary! {
-    // type of dictionary
     "Type" => "Font",
-    // type of font, type1 is simple postscript font
     "Subtype" => "Type1",
-    // basefont is postscript name of font for type1 font.
-    // See PDF reference document for more details
     "BaseFont" => "Courier",
 });
 
-// Font dictionaries need to be added into resource
-// dictionaries in order to be used.
-// Resource dictionaries can contain more than just fonts,
-// but normally just contains fonts.
-// Only one resource dictionary is allowed per page tree root.
 let resources_id = doc.add_object(dictionary! {
-    // Fonts are actually triplely nested dictionaries. Fun!
     "Font" => dictionary! {
-        // F1 is the font name used when writing text.
-        // It must be unique in the document. It does not
-        // have to be F1
         "F1" => font_id,
     },
 });
 
-// `Content` is a wrapper struct around an operations struct that contains
-// a vector of operations. The operations struct contains a vector of
-// that match up with a particular PDF operator and operands.
-// Refer to the PDF spec for more details on the operators and operands
-// Note, the operators and operands are specified in a reverse order
-// from how they actually appear in the PDF file itself.
+// Create page content
 let content = Content {
     operations: vec![
-        // BT begins a text element. It takes no operands.
         Operation::new("BT", vec![]),
-        // Tf specifies the font and font size.
-        // Font scaling is complicated in PDFs.
-        // Refer to the spec for more info.
-        // The `into()` methods convert the types into
-        // an enum that represents the basic object types in PDF documents.
         Operation::new("Tf", vec!["F1".into(), 48.into()]),
-        // Td adjusts the translation components of the text matrix.
-        // When used for the first time after BT, it sets the initial
-        // text position on the page.
-        // Note: PDF documents have Y=0 at the bottom. Thus 600 to print text near the top.
         Operation::new("Td", vec![100.into(), 600.into()]),
-        // Tj prints a string literal to the page. By default, this is black text that is
-        // filled in. There are other operators that can produce various textual effects and
-        // colors
         Operation::new("Tj", vec![Object::string_literal("Hello World!")]),
-        // ET ends the text element.
         Operation::new("ET", vec![]),
     ],
 };
 
-// Streams are a dictionary followed by a (possibly encoded) sequence of bytes.
-// What that sequence of bytes represents, depends on the context.
-// The stream dictionary is set internally by lopdf and normally doesn't
-// need to be manually manipulated. It contains keys such as
-// Length, Filter, DecodeParams, etc.
 let content_id = doc.add_object(Stream::new(dictionary! {}, content.encode().unwrap()));
 
-// Page is a dictionary that represents one page of a PDF file.
-// Its required fields are "Type", "Parent" and "Contents".
 let page_id = doc.add_object(dictionary! {
     "Type" => "Page",
     "Parent" => pages_id,
     "Contents" => content_id,
 });
 
-// Again, "Pages" is the root of the page tree. The ID was already created
-// at the top of the page, since we needed it to assign to the parent element
-// of the page dictionary.
-//
-// These are just the basic requirements for a page tree root object.
-// There are also many additional entries that can be added to the dictionary,
-// if needed. Some of these can also be defined on the page dictionary itself,
-// and not inherited from the page tree root.
 let pages = dictionary! {
-    // Type of dictionary
     "Type" => "Pages",
-    // Vector of page IDs in document. Normally would contain more than one ID
-    // and be produced using a loop of some kind.
     "Kids" => vec![page_id.into()],
-    // Page count
     "Count" => 1,
-    // ID of resources dictionary, defined earlier
     "Resources" => resources_id,
-    // A rectangle that defines the boundaries of the physical or digital media.
-    // This is the "page size".
     "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
 };
 
-// Using `insert()` here, instead of `add_object()` since the ID is already known.
 doc.objects.insert(pages_id, Object::Dictionary(pages));
 
-// Creating document catalog.
-// There are many more entries allowed in the catalog dictionary.
 let catalog_id = doc.add_object(dictionary! {
     "Type" => "Catalog",
     "Pages" => pages_id,
 });
 
-// The "Root" key in trailer is set to the ID of the document catalog,
-// the remainder of the trailer is set during `doc.save()`.
 doc.trailer.set("Root", catalog_id);
 doc.compress();
 
-// Store file in current working directory.
-// Note: Line is excluded when running tests
-if false {
+if false { // excluded from doctest
     // Traditional save
     doc.save("example.pdf").unwrap();
-    
-    // Or save with object streams for smaller file size
+
+    // Or save with modern compression (object streams + xref streams)
     let mut file = std::fs::File::create("example_compressed.pdf").unwrap();
     doc.save_modern(&mut file).unwrap();
 }
 ```
 
-* Merge PDF documents
+### Merge Multiple PDFs
 
 ```rust
 use lopdf::dictionary;
-
 use std::collections::BTreeMap;
-
 use lopdf::content::{Content, Operation};
 use lopdf::{Document, Object, ObjectId, Stream, Bookmark};
 
@@ -218,7 +404,6 @@ pub fn generate_fake_document() -> Document {
 }
 
 fn main() -> std::io::Result<()> {
-    // Generate a stack of Documents to merge.
     let documents = vec![
         generate_fake_document(),
         generate_fake_document(),
@@ -226,10 +411,8 @@ fn main() -> std::io::Result<()> {
         generate_fake_document(),
     ];
 
-    // Define a starting `max_id` (will be used as start index for object_ids).
     let mut max_id = 1;
     let mut pagenum = 1;
-    // Collect all Documents Objects grouped by a map
     let mut documents_pages = BTreeMap::new();
     let mut documents_objects = BTreeMap::new();
     let mut document = Document::with_version("1.5");
@@ -237,54 +420,40 @@ fn main() -> std::io::Result<()> {
     for mut doc in documents {
         let mut first = false;
         doc.renumber_objects_with(max_id);
-
         max_id = doc.max_id + 1;
 
         documents_pages.extend(
-            doc
-                    .get_pages()
-                    .into_iter()
-                    .map(|(_, object_id)| {
-                        if !first {
-                            let bookmark = Bookmark::new(String::from(format!("Page_{}", pagenum)), [0.0, 0.0, 1.0], 0, object_id);
-                            document.add_bookmark(bookmark, None);
-                            first = true;
-                            pagenum += 1;
-                        }
-
-                        (
-                            object_id,
-                            doc.get_object(object_id).unwrap().to_owned(),
-                        )
-                    })
-                    .collect::<BTreeMap<ObjectId, Object>>(),
+            doc.get_pages()
+                .into_iter()
+                .map(|(_, object_id)| {
+                    if !first {
+                        let bookmark = Bookmark::new(
+                            String::from(format!("Page_{}", pagenum)),
+                            [0.0, 0.0, 1.0], 0, object_id,
+                        );
+                        document.add_bookmark(bookmark, None);
+                        first = true;
+                        pagenum += 1;
+                    }
+                    (object_id, doc.get_object(object_id).unwrap().to_owned())
+                })
+                .collect::<BTreeMap<ObjectId, Object>>(),
         );
         documents_objects.extend(doc.objects);
     }
 
-    // "Catalog" and "Pages" are mandatory.
     let mut catalog_object: Option<(ObjectId, Object)> = None;
     let mut pages_object: Option<(ObjectId, Object)> = None;
 
-    // Process all objects except "Page" type
     for (object_id, object) in documents_objects.iter() {
-        // We have to ignore "Page" (as are processed later), "Outlines" and "Outline" objects.
-        // All other objects should be collected and inserted into the main Document.
         match object.type_name().unwrap_or(b"") {
             b"Catalog" => {
-                // Collect a first "Catalog" object and use it for the future "Pages".
                 catalog_object = Some((
-                    if let Some((id, _)) = catalog_object {
-                        id
-                    } else {
-                        *object_id
-                    },
+                    if let Some((id, _)) = catalog_object { id } else { *object_id },
                     object.clone(),
                 ));
             }
             b"Pages" => {
-                // Collect and update a first "Pages" object and use it for the future "Catalog"
-                // We have also to merge all dictionaries of the old and the new "Pages" object
                 if let Ok(dictionary) = object.as_dict() {
                     let mut dictionary = dictionary.clone();
                     if let Some((_, ref object)) = pages_object {
@@ -292,99 +461,57 @@ fn main() -> std::io::Result<()> {
                             dictionary.extend(old_dictionary);
                         }
                     }
-
                     pages_object = Some((
-                        if let Some((id, _)) = pages_object {
-                            id
-                        } else {
-                            *object_id
-                        },
+                        if let Some((id, _)) = pages_object { id } else { *object_id },
                         Object::Dictionary(dictionary),
                     ));
                 }
             }
-            b"Page" => {}     // Ignored, processed later and separately
-            b"Outlines" => {} // Ignored, not supported yet
-            b"Outline" => {}  // Ignored, not supported yet
-            _ => {
-                document.objects.insert(*object_id, object.clone());
-            }
+            b"Page" | b"Outlines" | b"Outline" => {}
+            _ => { document.objects.insert(*object_id, object.clone()); }
         }
     }
 
-    // If no "Pages" object found, abort.
-    if pages_object.is_none() {
-        println!("Pages root not found.");
-
+    if pages_object.is_none() || catalog_object.is_none() {
+        println!("Required objects not found.");
         return Ok(());
     }
 
-    // Iterate over all "Page" objects and collect into the parent "Pages" created before
     for (object_id, object) in documents_pages.iter() {
         if let Ok(dictionary) = object.as_dict() {
             let mut dictionary = dictionary.clone();
             dictionary.set("Parent", pages_object.as_ref().unwrap().0);
-
-            document
-                    .objects
-                    .insert(*object_id, Object::Dictionary(dictionary));
+            document.objects.insert(*object_id, Object::Dictionary(dictionary));
         }
-    }
-
-    // If no "Catalog" found, abort.
-    if catalog_object.is_none() {
-        println!("Catalog root not found.");
-
-        return Ok(());
     }
 
     let catalog_object = catalog_object.unwrap();
     let pages_object = pages_object.unwrap();
 
-    // Build a new "Pages" with updated fields
     if let Ok(dictionary) = pages_object.1.as_dict() {
         let mut dictionary = dictionary.clone();
-
-        // Set new pages count
         dictionary.set("Count", documents_pages.len() as u32);
-
-        // Set new "Kids" list (collected from documents pages) for "Pages"
         dictionary.set(
             "Kids",
-            documents_pages
-                    .into_iter()
-                    .map(|(object_id, _)| Object::Reference(object_id))
-                    .collect::<Vec<_>>(),
+            documents_pages.into_iter()
+                .map(|(object_id, _)| Object::Reference(object_id))
+                .collect::<Vec<_>>(),
         );
-
-        document
-                .objects
-                .insert(pages_object.0, Object::Dictionary(dictionary));
+        document.objects.insert(pages_object.0, Object::Dictionary(dictionary));
     }
 
-    // Build a new "Catalog" with updated fields
     if let Ok(dictionary) = catalog_object.1.as_dict() {
         let mut dictionary = dictionary.clone();
         dictionary.set("Pages", pages_object.0);
-        dictionary.remove(b"Outlines"); // Outlines not supported in merged PDFs
-
-        document
-                .objects
-                .insert(catalog_object.0, Object::Dictionary(dictionary));
+        dictionary.remove(b"Outlines");
+        document.objects.insert(catalog_object.0, Object::Dictionary(dictionary));
     }
 
     document.trailer.set("Root", catalog_object.0);
-
-    // Update the max internal ID as wasn't updated before due to direct objects insertion
     document.max_id = document.objects.len() as u32;
-
-    // Reorder all new Document objects
     document.renumber_objects();
-
-    // Set any Bookmarks to the First child if they are not set to a page
     document.adjust_zero_pages();
 
-    // Set all bookmarks to the PDF Object tree then set the Outlines to the Bookmark content map.
     if let Some(n) = document.build_outline() {
         if let Ok(Object::Dictionary(dict)) = document.get_object_mut(catalog_object.0) {
             dict.set("Outlines", Object::Reference(n));
@@ -393,10 +520,7 @@ fn main() -> std::io::Result<()> {
 
     document.compress();
 
-    // Save the merged PDF.
-    // Store file in current working directory.
-    // Note: Line is excluded when running doc tests
-    if false {
+    if false { // excluded from doctest
         document.save("merged.pdf").unwrap();
     }
 
@@ -404,262 +528,125 @@ fn main() -> std::io::Result<()> {
 }
 ```
 
-* Decrypt PDF documents
+### Encrypted PDFs
+
+lopdf supports reading and writing encrypted PDFs using RC4, AES-128, and AES-256 encryption.
+
+#### Load an Encrypted PDF
 
 ```rust
 use lopdf::Document;
 
-// Load and decrypt PDF documents with empty password
 #[cfg(not(feature = "async"))]
 {
-    // Load an encrypted PDF - automatically attempts decryption with empty password
+    // Automatic decryption with empty password
     let doc = Document::load("assets/encrypted.pdf").unwrap();
-    
-    // Check if the document is encrypted
-    if doc.is_encrypted() {
-        println!("Document is encrypted");
-        
-        // The document has been automatically decrypted if the password was empty
-        if doc.encryption_state.is_some() {
-            println!("Successfully decrypted with empty password");
-        }
-    }
-    
-    // Access decrypted content
-    let pages = doc.get_pages();
-    println!("Number of pages: {}", pages.len());
-    
-    // Extract text from decrypted document
-    let page_numbers: Vec<u32> = pages.keys().cloned().collect();
-    let text = doc.extract_text(&page_numbers).unwrap();
-    println!("Extracted {} characters of text", text.len());
-    
-    // Access individual objects
-    for i in 1..=10 {
-        if let Ok(obj) = doc.get_object((i, 0)) {
-            println!("Successfully accessed object ({}, 0)", i);
-        }
-    }
-}
 
-#[cfg(feature = "async")]
-{
-    tokio::runtime::Builder::new_current_thread()
-        .build()
-        .expect("Failed to create runtime")
-        .block_on(async move {
-            // Async version
-            let doc = Document::load("assets/encrypted.pdf").await.unwrap();
-            
-            if doc.is_encrypted() {
-                println!("Document is encrypted");
-                if doc.encryption_state.is_some() {
-                    println!("Successfully decrypted with empty password");
-                }
-            }
-            
-            let pages = doc.get_pages();
-            let page_numbers: Vec<u32> = pages.keys().cloned().collect();
-            let text = doc.extract_text(&page_numbers).unwrap();
-            println!("Extracted {} characters of text", text.len());
-        });
+    // Load with a specific password
+    // let doc = Document::load_with_password("protected.pdf", "secret").unwrap();
+
+    // Check if it was originally encrypted
+    if doc.was_encrypted() {
+        println!("Document was encrypted, now decrypted");
+        let pages = doc.get_pages();
+        let page_numbers: Vec<u32> = pages.keys().cloned().collect();
+        let text = doc.extract_text(&page_numbers).unwrap();
+        println!("Extracted {} chars", text.len());
+    }
+
+    // Load from memory with password
+    let bytes = std::fs::read("assets/encrypted.pdf").unwrap();
+    let doc = Document::load_mem(&bytes).unwrap();
+    // let doc = Document::load_mem_with_password(&bytes, "secret").unwrap();
+
+    // Metadata from encrypted PDFs (fast, no full load)
+    // let meta = Document::load_metadata_with_password("protected.pdf", "secret").unwrap();
 }
 ```
 
-* Modify PDF document
-
-```rust
-use lopdf::Document;
-
-// For this example to work a parser feature needs to be enabled
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "nom_parser")]
-{
-    let mut doc = Document::load("assets/example.pdf").unwrap();
-
-    doc.version = "1.4".to_string();
-    doc.replace_text(1, "Hello World!", "Modified text!", None);
-    // Store file in current working directory.
-    // Note: Line is excluded when running tests
-    if false {
-        doc.save("modified.pdf").unwrap();
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg(feature = "nom_parser")]
-{
-    tokio::runtime::Builder::new_current_thread()
-        .build()
-        .expect("Failed to create runtime")
-        .block_on(async move {
-            let mut doc = Document::load("assets/example.pdf").await.unwrap();
-            
-            doc.version = "1.4".to_string();
-            doc.replace_text(1, "Hello World!", "Modified text!", None);
-            // Store file in current working directory.
-            // Note: Line is excluded when running tests
-            if false {
-                doc.save("modified.pdf").unwrap();
-            }
-    });
-}
-
-// For this example to work a parser feature needs to be enabled
-#[cfg(not(feature = "async"))]
-#[cfg(feature = "nom_parser")]
-{
-    let mut doc = Document::load("assets/example.pdf").unwrap();
-
-    doc.version = "1.4".to_string();
-    
-    // Replace exact text matches
-    doc.replace_text(1, "Hello World!", "Modified text!", None);
-    
-    // Replace partial text matches (new method)
-    let count = doc.replace_partial_text(1, "Hello", "Hi", None).unwrap();
-    println!("Replaced {} occurrences", count);
-    
-    // Store file in current working directory.
-    // Note: Line is excluded when running tests
-    if false {
-        doc.save("modified.pdf").unwrap();
-    }
-}
-
-#[cfg(feature = "async")]
-#[cfg(feature = "nom_parser")]
-{
-    tokio::runtime::Builder::new_current_thread()
-        .build()
-        .expect("Failed to create runtime")
-        .block_on(async move {
-            let mut doc = Document::load("assets/example.pdf").await.unwrap();
-            
-            doc.version = "1.4".to_string();
-            
-            // Replace exact text matches
-            doc.replace_text(1, "Hello World!", "Modified text!", None);
-            
-            // Replace partial text matches (new method)
-            let count = doc.replace_partial_text(1, "Hello", "Hi", None).unwrap();
-            println!("Replaced {} occurrences", count);
-            
-            // Store file in current working directory.
-            // Note: Line is excluded when running tests
-            if false {
-                doc.save("modified.pdf").unwrap();
-            }
-    });
-}
-```
-
-* Save PDF with Object Streams (Modern Format)
-
-Object streams allow multiple non-stream objects to be compressed together, significantly reducing file size.
+#### Encrypt a PDF
 
 ```rust,no_run
-use lopdf::{Document, SaveOptions};
+use lopdf::{Document, EncryptionState, EncryptionVersion, Permissions};
 
-#[cfg(not(feature = "async"))]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load existing PDF
-    let mut doc = Document::load("input.pdf")?;
+fn main() {
+    let mut doc = Document::load("input.pdf").unwrap();
 
-    // Save with modern features (object streams + cross-reference streams)
-    // This typically reduces file size by 11-38%
-    let mut file = std::fs::File::create("output.pdf")?;
-    doc.save_modern(&mut file)?;
+    let permissions = Permissions::PRINTABLE
+        | Permissions::COPYABLE
+        | Permissions::COPYABLE_FOR_ACCESSIBILITY
+        | Permissions::PRINTABLE_IN_HIGH_QUALITY;
 
-    // For more control, use SaveOptions
-    let options = SaveOptions::builder()
-        .use_object_streams(true)        // Enable object streams
-        .use_xref_streams(true)          // Enable cross-reference streams
-        .max_objects_per_stream(200)     // Max objects per stream (default: 100)
-        .compression_level(9)            // Compression level 0-9 (default: 6)
-        .build();
+    // RC4 40-bit encryption (V1)
+    let version = EncryptionVersion::V1 {
+        document: &doc,
+        owner_password: "owner_pass",
+        user_password: "user_pass",
+        permissions,
+    };
 
-    let mut file2 = std::fs::File::create("output_custom.pdf")?;
-    doc.save_with_options(&mut file2, options)?;
-    
-    Ok(())
-}
-
-#[cfg(feature = "async")]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // For async feature, you need to use tokio runtime
-    println!("This example requires the async feature to be disabled");
-    Ok(())
+    let state = EncryptionState::try_from(version).unwrap();
+    doc.encrypt(&state).unwrap();
+    doc.save("encrypted.pdf").unwrap();
 }
 ```
 
-### Complete Example: Creating and Saving with Object Streams
+#### Decrypt a PDF
+
+```rust,no_run
+use lopdf::Document;
+
+fn main() {
+    let mut doc = Document::load("encrypted.pdf").unwrap();
+
+    if doc.is_encrypted() {
+        doc.decrypt("password").unwrap();
+        doc.save("decrypted.pdf").unwrap();
+    }
+}
+```
+
+### Save with Object Streams (Modern Format)
+
+Object streams (PDF 1.5+) compress multiple objects together, reducing file size by 11-61%.
 
 ```rust
 use lopdf::{Document, SaveOptions};
-use std::fs::File;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create or load a document
     let mut doc = Document::with_version("1.5");
-    // ... add content to document ...
+    // ... add content ...
 
-    // Method 1: Quick modern save (recommended)
-    let mut file = File::create("output.pdf")?;
+    // Quick modern save (recommended for most cases)
+    let mut file = std::fs::File::create("/dev/null")?;
     doc.save_modern(&mut file)?;
 
-    // Method 2: Custom settings for maximum compression
+    // Fine-grained control
     let options = SaveOptions::builder()
-        .use_object_streams(true)
-        .use_xref_streams(true)
-        .max_objects_per_stream(200)
-        .compression_level(9)
+        .use_object_streams(true)       // Compress objects together
+        .use_xref_streams(true)         // Binary cross-reference streams
+        .max_objects_per_stream(200)    // Default: 100
+        .compression_level(9)           // 0-9, default: 6
         .build();
 
-    let mut file2 = File::create("output_max_compressed.pdf")?;
+    let mut file2 = std::fs::File::create("/dev/null")?;
     doc.save_with_options(&mut file2, options)?;
 
-    // Compare file sizes (if traditional file exists)
-    if std::path::Path::new("output_traditional.pdf").exists() {
-        let traditional_size = std::fs::metadata("output_traditional.pdf")?.len();
-        let modern_size = std::fs::metadata("output.pdf")?.len();
-        let reduction = 100.0 - (modern_size as f64 / traditional_size as f64 * 100.0);
-        println!("Size reduction: {:.1}%", reduction);
-    }
-    
     Ok(())
 }
 ```
 
-For more examples, see:
-- [`examples/object_streams.rs`](examples/object_streams.rs) - Creating PDFs with object streams
-- [`examples/compress_existing_pdf.rs`](examples/compress_existing_pdf.rs) - Compress existing PDFs
-- [`examples/analyze_object_streams.rs`](examples/analyze_object_streams.rs) - Analyze object stream usage
-
-## Object Streams Support
-
-lopdf now includes full support for creating and reading PDF object streams (PDF 1.5+ feature). Object streams provide significant file size reduction by compressing multiple non-stream objects together.
-
-### Key Benefits
-
-- **File size reduction**: 11-61% smaller PDFs depending on content
-- **Modern PDF compliance**: Full PDF 1.5+ specification support
-- **Backward compatibility**: All existing APIs remain unchanged
-- **Performance**: <2ms to check 1000 objects for compression eligibility
-
-### Creating Object Streams Directly
+### Create Object Streams Directly
 
 ```rust
 use lopdf::{Object, ObjectStream, dictionary};
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create an object stream with custom settings
     let mut obj_stream = ObjectStream::builder()
-        .max_objects(100)      // Maximum objects per stream
-        .compression_level(6)  // zlib compression level (0-9)
+        .max_objects(100)
+        .compression_level(6)
         .build();
 
-    // Add objects to the stream
     obj_stream.add_object((1, 0), Object::Integer(42))?;
     obj_stream.add_object((2, 0), Object::Name(b"Example".to_vec()))?;
     obj_stream.add_object((3, 0), Object::Dictionary(dictionary! {
@@ -668,175 +655,240 @@ use lopdf::{Object, ObjectStream, dictionary};
         "BaseFont" => "Helvetica"
     }))?;
 
-    // Convert to a stream object
     let stream = obj_stream.to_stream_object()?;
     # Ok::<(), Box<dyn std::error::Error>>(())
 # }
 ```
 
-### Object Eligibility
+### Embed a TrueType Font
 
-Not all objects can be compressed into object streams. The following objects are **excluded**:
+```rust,no_run
+use lopdf::{Document, FontData};
 
-- Stream objects (content streams, image streams, etc.)
-- Cross-reference streams (Type = XRef)
-- Object streams themselves (Type = ObjStm)
-- Encryption dictionary (when referenced by trailer's Encrypt entry)
-- Objects with generation number > 0
-- Document catalog in linearized PDFs only
+fn main() {
+    let mut doc = Document::with_version("1.5");
 
-All other objects, including structural objects (Catalog, Pages, Page) and trailer-referenced objects (except encryption), can be compressed.
+    let font_bytes = std::fs::read("font.ttf").unwrap();
+    let font_data = FontData::new(&font_bytes, "MyFont".to_string());
+    let font_id = doc.add_font(font_data).unwrap();
 
-### Cross-reference Streams
-
-When using `save_modern()` or enabling `use_xref_streams(true)`, lopdf creates binary cross-reference streams instead of traditional ASCII cross-reference tables. This provides additional space savings and is part of the PDF 1.5+ specification.
-
-### SaveOptions Reference
-
-The `SaveOptions` builder provides fine-grained control over PDF compression:
-
-```rust
-use lopdf::SaveOptions;
-
-let options = SaveOptions::builder()
-    .use_object_streams(true)        // Enable object streams (default: false)
-    .use_xref_streams(true)          // Enable xref streams (default: false)
-    .max_objects_per_stream(200)     // Max objects per stream (default: 100)
-    .compression_level(9)            // zlib level 0-9 (default: 6)
-    .build();
+    // Use font_id in your page resources
+}
 ```
 
-## PDF Decryption Support
+### Incremental Updates
 
-lopdf now includes enhanced support for reading encrypted PDF documents. The library can automatically decrypt PDFs that use empty passwords, which is common for many protected documents.
-
-### Key Features
-
-- **Automatic decryption**: PDFs encrypted with empty passwords are automatically decrypted on load
-- **Object stream support**: Handles encrypted PDFs containing compressed object streams
-- **Transparent access**: Once decrypted, all document methods work normally
-- **Preservation of structure**: Document structure and content remain intact after decryption
-
-### How It Works
-
-When loading an encrypted PDF, lopdf:
-1. Detects encryption via the `Encrypt` entry in the trailer
-2. Extracts raw object bytes before parsing
-3. Attempts authentication with an empty password
-4. Decrypts all objects if authentication succeeds
-5. Processes compressed objects from object streams
-
-### Example: Working with Encrypted PDFs
+Append changes to an existing PDF without rewriting the entire file.
 
 ```rust
-use lopdf::Document;
+use lopdf::IncrementalDocument;
 
 #[cfg(not(feature = "async"))]
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load an encrypted PDF - automatically attempts decryption
-    let doc = Document::load("assets/encrypted.pdf")?;
-    
-    // Check encryption status
-    if doc.is_encrypted() {
-        println!("Document is encrypted");
-        
-        // Check if decryption was successful
-        if doc.encryption_state.is_some() {
-            println!("Successfully decrypted");
-            
-            // Now you can work with the document normally
-            let pages = doc.get_pages();
-            println!("Pages: {}", pages.len());
-            
-            // Extract text
-            let page_nums: Vec<u32> = pages.keys().cloned().collect();
-            let text = doc.extract_text(&page_nums)?;
-            println!("Text length: {} chars", text.len());
-            
-            // Access objects
-            for i in 1..=10 {
-                if let Ok(_) = doc.get_object((i, 0)) {
-                    println!("Object ({}, 0) accessible", i);
-                }
-            }
-        } else {
-            println!("Decryption failed - password required");
-        }
-    }
-    
-    Ok(())
+{
+    let mut inc_doc = IncrementalDocument::load("assets/example.pdf").unwrap();
+
+    // Modify through new_document
+    // inc_doc.new_document.set_object(id, new_object);
+
+    let prev = inc_doc.get_prev_documents();
+    println!("Previous version: {}", prev.version);
 }
+```
+
+### Filter Objects During Loading
+
+Load only the objects you need for faster processing:
+
+```rust
+use lopdf::{Document, Object};
+
+#[cfg(not(feature = "async"))]
+{
+    fn filter(object_id: (u32, u16), object: &mut Object) -> Option<((u32, u16), Object)> {
+        // Skip image and XObject streams to load faster
+        if let Ok(dict) = object.as_dict() {
+            if dict.has_type(b"XObject") {
+                return None;
+            }
+        }
+        Some((object_id, object.clone()))
+    }
+
+    let doc = Document::load_filtered("assets/example.pdf", filter).unwrap();
+    println!("Loaded {} objects (images excluded)", doc.objects.len());
+}
+```
+
+### Async Loading
+
+```rust,no_run
+// Enable with: lopdf = { version = "0.39", features = ["async"] }
 
 #[cfg(feature = "async")]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Load an encrypted PDF - automatically attempts decryption
-    let doc = Document::load("assets/encrypted.pdf").await?;
-    
-    // Check encryption status
-    if doc.is_encrypted() {
-        println!("Document is encrypted");
-        
-        // Check if decryption was successful
-        if doc.encryption_state.is_some() {
-            println!("Successfully decrypted");
-            
-            // Now you can work with the document normally
-            let pages = doc.get_pages();
-            println!("Pages: {}", pages.len());
-            
-            // Extract text
-            let page_nums: Vec<u32> = pages.keys().cloned().collect();
-            let text = doc.extract_text(&page_nums)?;
-            println!("Text length: {} chars", text.len());
-            
-            // Access objects
-            for i in 1..=10 {
-                if let Ok(_) = doc.get_object((i, 0)) {
-                    println!("Object ({}, 0) accessible", i);
-                }
-            }
-        } else {
-            println!("Decryption failed - password required");
-        }
-    }
-    
+    use lopdf::Document;
+
+    let doc = Document::load("input.pdf").await?;
+    let doc = Document::load_with_password("encrypted.pdf", "pass").await?;
+    let meta = Document::load_metadata("input.pdf").await?;
+
     Ok(())
+}
+
+#[cfg(not(feature = "async"))]
+fn main() {}
+```
+
+---
+
+## API Overview
+
+### Document
+
+| Method | Description |
+|--------|-------------|
+| `Document::load(path)` | Load from file |
+| `Document::load_with_password(path, pw)` | Load encrypted PDF |
+| `Document::load_mem(bytes)` | Load from memory |
+| `Document::load_from(reader)` | Load from any `Read` |
+| `Document::load_filtered(path, filter)` | Load with object filter |
+| `Document::load_metadata(path)` | Fast metadata extraction |
+| `Document::with_version(ver)` | Create new PDF |
+| `doc.save(path)` | Save to file |
+| `doc.save_to(writer)` | Save to writer |
+| `doc.save_modern(writer)` | Save with object/xref streams |
+| `doc.save_with_options(writer, opts)` | Save with custom options |
+| `doc.get_pages()` | Get page number to ID mapping |
+| `doc.page_iter()` | Iterate page IDs |
+| `doc.extract_text(pages)` | Extract text from pages |
+| `doc.replace_text(page, old, new, font)` | Replace text on a page |
+| `doc.replace_partial_text(page, old, new, font)` | Replace partial text matches |
+| `doc.get_page_content(page_id)` | Get decompressed page content |
+| `doc.get_page_fonts(page_id)` | Get fonts used on a page |
+| `doc.get_page_annotations(page_id)` | Get page annotations |
+| `doc.get_page_images(page_id)` | Extract images from a page |
+| `doc.get_toc()` | Extract table of contents |
+| `doc.catalog()` | Access document catalog |
+| `doc.get_object(id)` | Get object by ID |
+| `doc.add_object(obj)` | Add object, returns ID |
+| `doc.compress()` | Compress all streams |
+| `doc.encrypt(state)` | Encrypt the document |
+| `doc.decrypt(password)` | Decrypt the document |
+| `doc.is_encrypted()` | Check if encrypted |
+| `doc.was_encrypted()` | Check if was originally encrypted |
+| `doc.add_bookmark(bookmark, parent)` | Add a bookmark |
+| `doc.add_font(font_data)` | Embed a TrueType font |
+| `doc.renumber_objects()` | Renumber all object IDs |
+
+### Object
+
+PDF objects are represented by the `Object` enum:
+
+```rust,ignore
+Object::Null
+Object::Boolean(bool)
+Object::Integer(i64)
+Object::Real(f32)
+Object::Name(Vec<u8>)
+Object::String(Vec<u8>, StringFormat)
+Object::Array(Vec<Object>)
+Object::Dictionary(Dictionary)
+Object::Stream(Stream)
+Object::Reference(ObjectId)   // (u32, u16)
+```
+
+Type conversions: `as_bool()`, `as_i64()`, `as_f32()`, `as_name()`, `as_str()`, `as_reference()`, `as_array()`, `as_dict()`, `as_stream()`, and mutable variants.
+
+Many Rust types convert to `Object` via `Into`: `bool`, `i64`, `f64`, `&str`, `String`, `Vec<Object>`, `Dictionary`, `Stream`, `ObjectId`.
+
+### Dictionary
+
+```rust,ignore
+let mut dict = lopdf::dictionary! {
+    "Type" => "Page",
+    "Parent" => parent_id,
+    "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()],
+};
+
+dict.set("Rotate", 90);
+dict.has(b"Type");          // true
+dict.get(b"Type");          // Ok(&Object)
+dict.remove(b"Rotate");     // Some(Object)
+```
+
+### Stream
+
+```rust,ignore
+let stream = Stream::new(dictionary! {}, content_bytes);
+
+stream.compress()?;                    // Compress with FlateDecode
+let plain = stream.get_plain_content()?; // Decompress
+stream.filters()?;                     // Get filter names
+```
+
+### PdfMetadata
+
+```rust,ignore
+pub struct PdfMetadata {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub subject: Option<String>,
+    pub keywords: Option<String>,
+    pub creator: Option<String>,
+    pub producer: Option<String>,
+    pub creation_date: Option<String>,
+    pub modification_date: Option<String>,
+    pub page_count: u32,
+    pub version: String,
 }
 ```
 
-### Limitations
+### SaveOptions
 
-- Currently only supports PDFs encrypted with empty passwords
-- Password-protected PDFs require manual authentication (use `authenticate_password` method)
-- Some encryption algorithms may not be fully supported
+```rust,ignore
+SaveOptions::builder()
+    .use_object_streams(true)       // default: false
+    .use_xref_streams(true)         // default: false
+    .max_objects_per_stream(200)    // default: 100
+    .compression_level(9)           // 0-9, default: 6
+    .build()
+```
 
-For more examples, see:
-- [`examples/test_decryption.rs`](examples/test_decryption.rs) - Testing decryption functionality
-- [`examples/verify_decryption.rs`](examples/verify_decryption.rs) - Comprehensive decryption verification
-- [`tests/decryption.rs`](tests/decryption.rs) - Decryption test suite
+### Permissions (for encryption)
+
+```rust,ignore
+use lopdf::Permissions;
+
+let perms = Permissions::PRINTABLE
+    | Permissions::COPYABLE
+    | Permissions::ANNOTABLE
+    | Permissions::MODIFIABLE
+    | Permissions::FILLABLE
+    | Permissions::COPYABLE_FOR_ACCESSIBILITY
+    | Permissions::ASSEMBLABLE
+    | Permissions::PRINTABLE_IN_HIGH_QUALITY;
+```
+
+---
 
 ## FAQ
 
-* Why does the library keep everything in memory as high-level objects until finally serializing the entire document?
+**Why does the library keep everything in memory?**
 
-  Normally, a PDF document won't be very large, ranging from tens of KB to hundreds of MB. Memory size is not a bottle neck for today's computer.
-  By keeping the whole document in memory, the stream length can be pre-calculated, no need to use a reference object for the Length entry.
-  The resulting PDF file is smaller for distribution and faster for PDF consumers to process.
+Most PDFs range from tens of KB to hundreds of MB. Keeping the whole document in memory allows stream lengths to be pre-calculated, producing smaller files that are faster for PDF consumers to process.
 
-  Producing is a one-time effort, while consuming is many more.
+**What PDF versions support object streams?**
 
-* How do object streams affect memory usage?
+Object streams were introduced in PDF 1.5. When using `save_modern()`, lopdf ensures the version is at least 1.5. For compatibility with older readers, use `save()`.
 
-  Object streams actually help reduce memory usage during document creation. When enabled, multiple small objects are grouped and compressed together, reducing the overall memory footprint. The compression happens during the save operation, so the in-memory representation remains the same until `save_with_options()` or `save_modern()` is called.
+**How do object streams affect memory usage?**
 
-* What PDF versions support object streams?
+Object streams reduce memory during save by grouping and compressing small objects together. The in-memory representation stays the same until `save_modern()` or `save_with_options()` is called.
 
-  Object streams were introduced in PDF 1.5. When using `save_modern()` or object streams, lopdf automatically ensures the document version is at least 1.5. For maximum compatibility with older PDF readers, you can use the traditional `save()` method.
+**Can I read PDFs that already use object streams?**
 
-* Can I analyze existing PDFs to see if they use object streams?
-
-  Yes! lopdf can read and parse object streams from existing PDFs. Use the `Document::load()` method to open any PDF, and lopdf will automatically handle object streams if present. See the examples directory for analysis tools.
+Yes. `Document::load()` automatically handles object streams in existing PDFs.
 
 ## License
 
