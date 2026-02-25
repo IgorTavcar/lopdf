@@ -53,12 +53,37 @@ ttf-parser = "0.25.1"
 
 [dev-dependencies]
 clap = { version = "4.0", features = ["derive"] }
+criterion = { version = "0.5", features = ["html_reports"] }
 env_logger = "0.11"
 serde_json = "1.0"
 shellexpand = "3.0"
 tempfile = "3.3"
 wasm-bindgen-test = "0.3"
 ttf-parser = "0.25.1"
+
+[[bench]]
+name = "datetime"
+harness = false
+
+[[bench]]
+name = "parse"
+harness = false
+
+[[bench]]
+name = "load"
+harness = false
+
+[[bench]]
+name = "text"
+harness = false
+
+[[bench]]
+name = "save"
+harness = false
+
+[[bench]]
+name = "object_stream"
+harness = false
 
 [features]
 async = ["tokio/rt-multi-thread", "tokio/macros"]

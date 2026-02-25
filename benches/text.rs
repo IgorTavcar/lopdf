@@ -1,12 +1,10 @@
-#![feature(test)]
 use std::fs::File;
 use std::io::{Cursor, Read};
 
-extern crate test;
+use criterion::{criterion_group, criterion_main, Criterion};
 use lopdf::Document;
 
-#[bench]
-fn bench_extract_text(b: &mut test::test::Bencher) {
+fn bench_extract_text(c: &mut Criterion) {
     let mut buffer = Vec::new();
     File::open("assets/example.pdf")
         .unwrap()
@@ -16,21 +14,27 @@ fn bench_extract_text(b: &mut test::test::Bencher) {
     let doc = Document::load_from(Cursor::new(&buffer)).unwrap();
     let pages: Vec<u32> = doc.get_pages().keys().cloned().collect();
 
-    b.iter(|| {
-        let _ = doc.extract_text(&pages);
-    })
+    c.bench_function("extract_text", |b| {
+        b.iter(|| {
+            let _ = doc.extract_text(&pages);
+        })
+    });
 }
 
-#[bench]
-fn bench_text_replace(b: &mut test::test::Bencher) {
+fn bench_text_replace(c: &mut Criterion) {
     let mut buffer = Vec::new();
     File::open("assets/example.pdf")
         .unwrap()
         .read_to_end(&mut buffer)
         .unwrap();
 
-    b.iter(|| {
-        let mut doc = Document::load_from(Cursor::new(&buffer)).unwrap();
-        let _ = doc.replace_text(1, "Hello World", "Replaced Text");
-    })
+    c.bench_function("text_replace", |b| {
+        b.iter(|| {
+            let mut doc = Document::load_from(Cursor::new(&buffer)).unwrap();
+            let _ = doc.replace_text(1, "Hello World", "Replaced Text", None);
+        })
+    });
 }
+
+criterion_group!(benches, bench_extract_text, bench_text_replace);
+criterion_main!(benches);

@@ -1,32 +1,36 @@
-#![feature(test)]
 use std::fs::File;
 use std::io::{Cursor, Read};
 
-extern crate test;
+use criterion::{criterion_group, criterion_main, Criterion};
 use lopdf::Document;
 
-#[bench]
-fn bench_load_large(b: &mut test::test::Bencher) {
+fn bench_load_large(c: &mut Criterion) {
     let mut buffer = Vec::new();
     File::open("assets/AnnotationDemo.pdf")
         .unwrap()
         .read_to_end(&mut buffer)
         .unwrap();
 
-    b.iter(|| {
-        Document::load_from(Cursor::new(&buffer)).unwrap();
-    })
+    c.bench_function("load_large", |b| {
+        b.iter(|| {
+            Document::load_from(Cursor::new(&buffer)).unwrap();
+        })
+    });
 }
 
-#[bench]
-fn bench_load_encrypted(b: &mut test::test::Bencher) {
+fn bench_load_encrypted(c: &mut Criterion) {
     let mut buffer = Vec::new();
     File::open("assets/encrypted.pdf")
         .unwrap()
         .read_to_end(&mut buffer)
         .unwrap();
 
-    b.iter(|| {
-        let _ = Document::load_from(Cursor::new(&buffer));
-    })
+    c.bench_function("load_encrypted", |b| {
+        b.iter(|| {
+            let _ = Document::load_from(Cursor::new(&buffer));
+        })
+    });
 }
+
+criterion_group!(benches, bench_load_large, bench_load_encrypted);
+criterion_main!(benches);

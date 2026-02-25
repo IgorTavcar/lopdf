@@ -1,13 +1,11 @@
-#![feature(test)]
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::{Cursor, Read};
 
-extern crate test;
-use lopdf::{Document, Object, ObjectStreamBuilder, ObjectStreamConfig};
+use criterion::{criterion_group, criterion_main, Criterion};
+use lopdf::{dictionary, Document, Object, ObjectStream};
 
-#[bench]
-fn bench_object_stream_compress(b: &mut test::test::Bencher) {
+fn bench_object_stream_compress(c: &mut Criterion) {
     // Create 100 simple dictionary objects
     let mut objects: BTreeMap<(u32, u16), Object> = BTreeMap::new();
     for i in 1..=100 {
@@ -18,23 +16,34 @@ fn bench_object_stream_compress(b: &mut test::test::Bencher) {
         objects.insert((i, 0), Object::Dictionary(dict));
     }
 
-    b.iter(|| {
-        let config = ObjectStreamConfig::default();
-        let builder = ObjectStreamBuilder::new(config);
-        let _ = builder.build_object_streams(&objects);
-    })
+    c.bench_function("object_stream_compress", |b| {
+        b.iter(|| {
+            let mut stream = ObjectStream::builder().build();
+            for (&id, obj) in &objects {
+                stream.add_object(id, obj.clone()).unwrap();
+            }
+            let _ = stream.to_stream_object();
+        })
+    });
 }
 
-#[bench]
-fn bench_object_stream_parse(b: &mut test::test::Bencher) {
+fn bench_object_stream_parse(c: &mut Criterion) {
     let mut buffer = Vec::new();
     File::open("assets/example.pdf")
         .unwrap()
         .read_to_end(&mut buffer)
         .unwrap();
 
-    // Benchmark parsing a PDF that may contain object streams
-    b.iter(|| {
-        let _ = Document::load_from(Cursor::new(&buffer));
-    })
+    c.bench_function("object_stream_parse", |b| {
+        b.iter(|| {
+            let _ = Document::load_from(Cursor::new(&buffer));
+        })
+    });
 }
+
+criterion_group!(
+    benches,
+    bench_object_stream_compress,
+    bench_object_stream_parse
+);
+criterion_main!(benches);
